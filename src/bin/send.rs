@@ -22,7 +22,7 @@ impl Sender {
     fn new(host: Ipv4Addr, port: u16) -> Result<Self, Box<dyn Error>> {
         let socket = UdpSocket::bind("0.0.0.0:0")?;
         socket.connect(SocketAddr::new(host.into(), port))?;
-        socket.set_read_timeout(Some(Duration::from_millis(1)))?;
+        socket.set_nonblocking(true)?;
         eprintln!("Sender starting up using port {}", port);
 
         Ok(Sender {
@@ -111,6 +111,10 @@ impl Sender {
                     self.ssthresh = (self.window_size / 2.0).max(1.0);
                     self.window_size = self.ssthresh;
                     *dup_count = 0;
+                    if let Some((packet, sent_at)) = in_flight.first_mut() {
+                        self.send_packet(packet).ok();
+                        *sent_at = Instant::now();
+                    }
                 }
             }
         }
