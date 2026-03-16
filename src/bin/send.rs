@@ -11,6 +11,7 @@ use rtp::{Packet, MAX_DATA, TYPE_MSG};
 struct Sender {
     socket: UdpSocket,
     smoothed_rtt: Duration,
+    rtt_var: Duration,
     window_size: f64,
     ssthresh: f64,
 }
@@ -26,6 +27,7 @@ impl Sender {
         Ok(Sender {
             socket,
             smoothed_rtt: Duration::from_secs(1),
+            rtt_var: Duration::from_millis(500),
             window_size: 1.0,
             ssthresh: 64.0,
         })
@@ -84,6 +86,10 @@ impl Sender {
     fn handle_ack(&mut self, in_flight: &mut Vec<(Packet, Instant)>, dup_count: &mut u32) {
         while let Some(ack) = self.recv_ack() {
             if let Some(pos) = in_flight.iter().position(|(p, _)| p.seq == ack.seq) {
+                let sample = in_flight[pos].1.elapsed(); // The elapsed time of ack'd packet in flight
+                let diff = sample.abs_diff(self.smoothed_rtt);
+                self.rtt_var = self.rtt_var.mul_f64(0.75) + diff.mul_f64(0.25);
+                self.smoothed_rtt = self.smoothed_rtt.mul_f64(0.875) + sample.mul_f64(0.125);
                 in_flight.remove(pos);
                 if self.window_size < self.ssthresh {
                     self.window_size += 1.0;
@@ -108,7 +114,7 @@ impl Sender {
         &mut self,
         in_flight: &mut Vec<(Packet, Instant)>,
     ) -> Result<(), Box<dyn Error>> {
-        let timeout = self.smoothed_rtt * 2;
+        let timeout = self.smoothed_rtt + self.rtt_var * 4;
         let mut did_retransmit = false;
         for (packet, sent_at) in in_flight {
             if sent_at.elapsed() > timeout {
