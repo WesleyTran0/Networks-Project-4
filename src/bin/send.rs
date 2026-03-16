@@ -27,8 +27,8 @@ impl Sender {
 
         Ok(Sender {
             socket,
-            smoothed_rtt: Duration::from_millis(500),
-            rtt_var: Duration::from_millis(100),
+            smoothed_rtt: Duration::from_millis(200),
+            rtt_var: Duration::from_millis(50),
             window_size: 2.0,
             ssthresh: 64.0,
         })
