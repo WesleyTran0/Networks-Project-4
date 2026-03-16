@@ -148,7 +148,22 @@ impl Sender {
         let mut dup_count: u32 = 0;
 
         loop {
-            self.fill_window(&mut seq, &mut stdin, &mut buf, &mut in_flight, &mut done)?;
+            if !done && in_flight.len() < self.window_size as usize {
+                let n = stdin.read(&mut buf)?;
+                if n == 0 {
+                    done = true;
+                } else {
+                    let packet = Packet {
+                        ptype: TYPE_MSG,
+                        seq,
+                        data: buf[..n].to_vec(),
+                    };
+                    self.send_packet(&packet)?;
+                    in_flight.push((packet, Instant::now()));
+                    seq += 1;
+                }
+            }
+
             if done && in_flight.is_empty() {
                 eprintln!("All done!");
                 return Ok(());
