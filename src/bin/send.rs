@@ -17,19 +17,20 @@ struct Sender {
 }
 
 impl Sender {
-    /// Initializes this sender by connecting to 0.0.0.0 on port 0. RTT, window_size, and ssthresh
-    /// are all initializes to 1 second, 1.0, and 64.0 respectively
+    /// Initializes this sender by connecting to 0.0.0.0 on port 0. smoothed_RTT, rtt variance,
+    /// window_size, and ssthresh are all initializes to 0.5s, 0.5s 2.0, and 128.0 respectively
     fn new(host: Ipv4Addr, port: u16) -> Result<Self, Box<dyn Error>> {
         let socket = UdpSocket::bind("0.0.0.0:0")?;
         socket.connect(SocketAddr::new(host.into(), port))?;
         socket.set_read_timeout(Some(Duration::from_millis(1)))?;
         eprintln!("Sender starting up using port {}", port);
+
         Ok(Sender {
             socket,
-            smoothed_rtt: Duration::from_secs(1),
+            smoothed_rtt: Duration::from_millis(500),
             rtt_var: Duration::from_millis(500),
-            window_size: 1.0,
-            ssthresh: 64.0,
+            window_size: 2.0,
+            ssthresh: 128.0,
         })
     }
 
