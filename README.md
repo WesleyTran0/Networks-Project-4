@@ -15,7 +15,8 @@ was to encode the data as base64, but after realizing that base64 would result i
 I was structuring my packets and eventually just stored the data as bits/bytes.
 
 Optimizations were their struggle on their own. Upon first attempt, I implemented TCP Reno strategies, but was still
-not getting full score. From there I turned to other TCP strategies.
+not getting full score. From there, I reduced my timeout time from 100ms to 1ms and started processing all acks before
+looking to fill up the sender window again.
 
 # Tests
 

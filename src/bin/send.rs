@@ -21,7 +21,7 @@ impl Sender {
     fn new(host: Ipv4Addr, port: u16) -> Result<Self, Box<dyn Error>> {
         let socket = UdpSocket::bind("0.0.0.0:0")?;
         socket.connect(SocketAddr::new(host.into(), port))?;
-        socket.set_read_timeout(Some(Duration::from_millis(100)))?;
+        socket.set_read_timeout(Some(Duration::from_millis(1)))?;
         eprintln!("Sender starting up using port {}", port);
         Ok(Sender {
             socket,
@@ -82,12 +82,8 @@ impl Sender {
     /// smoothed_rtt, window_size, and ssthresh. These take inspiration from TCP Reno and implement
     /// the triple duplicated ACK approach.
     fn handle_ack(&mut self, in_flight: &mut Vec<(Packet, Instant)>, dup_count: &mut u32) {
-        if let Some(ack) = self.recv_ack() {
+        while let Some(ack) = self.recv_ack() {
             if let Some(pos) = in_flight.iter().position(|(p, _)| p.seq == ack.seq) {
-                let sample = in_flight[pos].1.elapsed();
-                if sample < self.smoothed_rtt * 2 {
-                    self.smoothed_rtt = self.smoothed_rtt.mul_f64(0.875) + sample.mul_f64(0.125);
-                }
                 in_flight.remove(pos);
                 if self.window_size < self.ssthresh {
                     self.window_size += 1.0;
