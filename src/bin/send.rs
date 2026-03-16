@@ -27,8 +27,8 @@ impl Sender {
 
         Ok(Sender {
             socket,
-            smoothed_rtt: Duration::from_millis(200),
-            rtt_var: Duration::from_millis(50),
+            smoothed_rtt: Duration::from_millis(500),
+            rtt_var: Duration::from_millis(100),
             window_size: 2.0,
             ssthresh: 64.0,
         })
@@ -111,10 +111,6 @@ impl Sender {
                     self.ssthresh = (self.window_size / 2.0).max(1.0);
                     self.window_size = self.ssthresh;
                     *dup_count = 0;
-                    if let Some((packet, sent_at)) = in_flight.first_mut() {
-                        self.send_packet(packet).ok();
-                        *sent_at = Instant::now();
-                    }
                 }
             }
         }
