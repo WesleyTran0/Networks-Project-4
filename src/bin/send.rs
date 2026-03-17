@@ -28,9 +28,9 @@ impl Sender {
 
         Ok(Sender {
             socket,
-            smoothed_rtt: Duration::from_millis(200),
-            rtt_var: Duration::from_millis(50),
-            window_size: 4.0,
+            smoothed_rtt: Duration::from_millis(300),
+            rtt_var: Duration::from_millis(75),
+            window_size: 3.0,
             ssthresh: 64.0,
         })
     }
@@ -106,6 +106,7 @@ impl Sender {
                 self.smoothed_rtt = self.smoothed_rtt.mul_f64(0.875) + sample.mul_f64(0.125);
                 in_flight.remove(pos);
                 acked.insert(ack.seq);
+
                 if self.window_size < self.ssthresh {
                     self.window_size += 1.0;
                 } else {
@@ -113,6 +114,7 @@ impl Sender {
                 }
                 *dup_count = 0;
             } else if acked.contains(&ack.seq) {
+                // Network duplicated, ignore this ack
             } else {
                 *dup_count += 1;
                 if *dup_count >= 3 {
