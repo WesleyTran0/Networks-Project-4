@@ -142,10 +142,14 @@ impl Sender {
         in_flight: &mut Vec<(Packet, Instant)>,
     ) -> Result<(), Box<dyn Error>> {
         let timeout = self.smoothed_rtt + self.rtt_var * 4;
-        if let Some((packet, sent_at)) = in_flight.first_mut() {
+        let mut did_retransmit = false;
+        for (packet, sent_at) in in_flight {
             if sent_at.elapsed() > timeout {
-                self.ssthresh = (self.window_size * 0.5).max(2.0);
-                self.window_size = self.ssthresh;
+                if !did_retransmit {
+                    self.ssthresh = (self.window_size * 0.7).max(2.0);
+                    self.window_size = self.ssthresh;
+                    did_retransmit = true;
+                }
                 self.send_packet(packet)?;
                 *sent_at = Instant::now();
             }
