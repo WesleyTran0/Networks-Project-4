@@ -121,11 +121,6 @@ impl Sender {
                     self.ssthresh = (self.window_size / 2.0).max(1.0);
                     self.window_size = self.ssthresh;
                     *dup_count = 0;
-                    // retransmit when found 3 dup acks
-                    if let Some((packet, sent_at)) = in_flight.first_mut() {
-                        let _ = self.send_packet(packet);
-                        *sent_at = Instant::now();
-                    }
                 }
             }
         }
@@ -143,7 +138,7 @@ impl Sender {
             if sent_at.elapsed() > timeout {
                 if !did_retransmit {
                     self.ssthresh = (self.window_size / 2.0).max(1.0);
-                    self.window_size = self.ssthresh;
+                    self.window_size = 1.0;
                     did_retransmit = true;
                 }
                 self.send_packet(packet)?;
@@ -164,7 +159,22 @@ impl Sender {
         let mut acked = HashSet::new();
 
         loop {
-            self.fill_window(&mut seq, &mut stdin, &mut buf, &mut in_flight, &mut done)?;
+            if !done && in_flight.len() < self.window_size as usize {
+                let n = stdin.read(&mut buf)?;
+                if n == 0 {
+                    done = true;
+                } else {
+                    let packet = Packet {
+                        ptype: TYPE_MSG,
+                        seq,
+                        data: buf[..n].to_vec(),
+                    };
+                    self.send_packet(&packet)?;
+                    in_flight.push((packet, Instant::now()));
+                    seq += 1;
+                }
+            }
+
             if done && in_flight.is_empty() {
                 eprintln!("All done!");
                 return Ok(());
