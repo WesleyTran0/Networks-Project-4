@@ -28,8 +28,8 @@ impl Sender {
 
         Ok(Sender {
             socket,
-            smoothed_rtt: Duration::from_millis(300),
-            rtt_var: Duration::from_millis(75),
+            smoothed_rtt: Duration::from_millis(400),
+            rtt_var: Duration::from_millis(100),
             window_size: 3.0,
             ssthresh: 64.0,
         })
@@ -113,6 +113,10 @@ impl Sender {
                     self.window_size += 1.0 / self.window_size;
                 }
                 *dup_count = 0;
+                if let Some((packet, sent_at)) = in_flight.first_mut() {
+                    let _ = self.send_packet(packet);
+                    *sent_at = Instant::now();
+                }
             } else if acked.contains(&ack.seq) {
                 // Network duplicated, ignore this ack
             } else {
@@ -138,7 +142,7 @@ impl Sender {
             if sent_at.elapsed() > timeout {
                 if !did_retransmit {
                     self.ssthresh = (self.window_size / 2.0).max(1.0);
-                    self.window_size = 1.0;
+                    self.window_size = self.ssthresh;
                     did_retransmit = true;
                 }
                 self.send_packet(packet)?;
@@ -159,21 +163,7 @@ impl Sender {
         let mut acked = HashSet::new();
 
         loop {
-            if !done && in_flight.len() < self.window_size as usize {
-                let n = stdin.read(&mut buf)?;
-                if n == 0 {
-                    done = true;
-                } else {
-                    let packet = Packet {
-                        ptype: TYPE_MSG,
-                        seq,
-                        data: buf[..n].to_vec(),
-                    };
-                    self.send_packet(&packet)?;
-                    in_flight.push((packet, Instant::now()));
-                    seq += 1;
-                }
-            }
+            self.fill_window(&mut seq, &mut stdin, &mut buf, &mut in_flight, &mut done)?;
 
             if done && in_flight.is_empty() {
                 eprintln!("All done!");
