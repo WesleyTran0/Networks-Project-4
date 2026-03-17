@@ -108,7 +108,7 @@ impl Sender {
                 acked.insert(ack.seq);
 
                 if self.window_size < self.ssthresh {
-                    self.window_size += 1.0;
+                    self.window_size += 1.5;
                 } else {
                     self.window_size += 1.0 / self.window_size;
                 }
