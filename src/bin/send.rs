@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     error::Error,
     io::Read,
     net::{Ipv4Addr, SocketAddr, UdpSocket},
@@ -27,9 +28,9 @@ impl Sender {
 
         Ok(Sender {
             socket,
-            smoothed_rtt: Duration::from_millis(500),
-            rtt_var: Duration::from_millis(100),
-            window_size: 2.0,
+            smoothed_rtt: Duration::from_millis(200),
+            rtt_var: Duration::from_millis(50),
+            window_size: 4.0,
             ssthresh: 64.0,
         })
     }
@@ -84,7 +85,12 @@ impl Sender {
     /// Attempts to receive an ack from this sender's socket and adjust both this sender's expected
     /// smoothed_rtt, window_size, and ssthresh. These take inspiration from TCP Reno and implement
     /// the triple duplicated ACK approach.
-    fn handle_ack(&mut self, in_flight: &mut Vec<(Packet, Instant)>, dup_count: &mut u32) {
+    fn handle_ack(
+        &mut self,
+        in_flight: &mut Vec<(Packet, Instant)>,
+        dup_count: &mut u32,
+        acked: &mut HashSet<u32>,
+    ) {
         while let Some(ack) = self.recv_ack() {
             if let Some(pos) = in_flight.iter().position(|(p, _)| p.seq == ack.seq) {
                 let sample = in_flight[pos].1.elapsed(); // The elapsed time of ack'd packet in flight
@@ -99,12 +105,14 @@ impl Sender {
                 self.rtt_var = self.rtt_var.mul_f64(0.75) + diff.mul_f64(0.25);
                 self.smoothed_rtt = self.smoothed_rtt.mul_f64(0.875) + sample.mul_f64(0.125);
                 in_flight.remove(pos);
+                acked.insert(ack.seq);
                 if self.window_size < self.ssthresh {
                     self.window_size += 1.0;
                 } else {
                     self.window_size += 1.0 / self.window_size;
                 }
                 *dup_count = 0;
+            } else if acked.contains(&ack.seq) {
             } else {
                 *dup_count += 1;
                 if *dup_count >= 3 {
@@ -151,6 +159,7 @@ impl Sender {
         let mut done = false;
         let mut in_flight: Vec<(Packet, Instant)> = Vec::new();
         let mut dup_count: u32 = 0;
+        let mut acked = HashSet::new();
 
         loop {
             self.fill_window(&mut seq, &mut stdin, &mut buf, &mut in_flight, &mut done)?;
@@ -158,7 +167,7 @@ impl Sender {
                 eprintln!("All done!");
                 return Ok(());
             }
-            self.handle_ack(&mut in_flight, &mut dup_count);
+            self.handle_ack(&mut in_flight, &mut dup_count, &mut acked);
             self.check_timeouts(&mut in_flight)?;
         }
     }
