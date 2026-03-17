@@ -142,7 +142,7 @@ impl Sender {
         for (packet, sent_at) in in_flight {
             if sent_at.elapsed() > timeout {
                 if !did_retransmit {
-                    self.ssthresh = (self.window_size / 2.0).max(1.0);
+                    self.ssthresh = (self.window_size * 0.7).max(2.0);
                     self.window_size = self.ssthresh;
                     did_retransmit = true;
                 }
