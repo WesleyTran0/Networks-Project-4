@@ -90,6 +90,7 @@ impl Sender {
         in_flight: &mut Vec<(Packet, Instant)>,
         dup_count: &mut u32,
         acked: &mut HashSet<u32>,
+        last_fast_retrasmit: &mut Instant,
     ) {
         while let Some(ack) = self.recv_ack() {
             if let Some(pos) = in_flight.iter().position(|(p, _)| p.seq == ack.seq) {
@@ -116,15 +117,18 @@ impl Sender {
             } else if acked.contains(&ack.seq) {
                 // Network duplicated, ignore this ack
             } else {
-                *dup_count += 1;
-                if *dup_count >= 3 {
-                    self.ssthresh = (self.window_size / 2.0).max(1.0);
-                    self.window_size = self.ssthresh;
-                    *dup_count = 0;
-                    // retransmit when found 3 dup acks
-                    if let Some((packet, sent_at)) = in_flight.first_mut() {
-                        let _ = self.send_packet(packet);
-                        *sent_at = Instant::now();
+                if last_fast_retrasmit.elapsed() > self.smoothed_rtt {
+                    *dup_count += 1;
+                    if *dup_count >= 3 {
+                        self.ssthresh = (self.window_size * 0.7).max(2.0);
+                        self.window_size = self.ssthresh;
+                        *dup_count = 0;
+                        *last_fast_retrasmit = Instant::now();
+                        // retransmit when found 3 dup acks
+                        if let Some((packet, sent_at)) = in_flight.first_mut() {
+                            let _ = self.send_packet(packet);
+                            *sent_at = Instant::now();
+                        }
                     }
                 }
             }
@@ -162,6 +166,7 @@ impl Sender {
         let mut in_flight: Vec<(Packet, Instant)> = Vec::new();
         let mut dup_count: u32 = 0;
         let mut acked = HashSet::new();
+        let mut last_fast_retransmit = Instant::now() - Duration::from_secs(10);
 
         loop {
             self.fill_window(&mut seq, &mut stdin, &mut buf, &mut in_flight, &mut done)?;
@@ -169,7 +174,12 @@ impl Sender {
                 eprintln!("All done!");
                 return Ok(());
             }
-            self.handle_ack(&mut in_flight, &mut dup_count, &mut acked);
+            self.handle_ack(
+                &mut in_flight,
+                &mut dup_count,
+                &mut acked,
+                &mut last_fast_retransmit,
+            );
             self.check_timeouts(&mut in_flight)?;
         }
     }
